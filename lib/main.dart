@@ -14,7 +14,6 @@ final FlutterLocalNotificationsPlugin bildirimMotoru = FlutterLocalNotifications
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Saat dilimi ve Android bildirim altyapısını başlat
   tz.initializeTimeZones();
   tz.setLocalLocation(tz.getLocation('Europe/Istanbul'));
 
@@ -33,7 +32,7 @@ class SeraFinansApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Sera Finans - Kişisel CFO',
+      title: 'Sera Finans - Personal CFO',
       debugShowCheckedModeBanner: false,
       theme: ThemeData(
         useMaterial3: true,
@@ -179,6 +178,7 @@ class AnaIskelet extends StatefulWidget {
 class _AnaIskeletState extends State<AnaIskelet> {
   int _seciliSekme = 0;
   bool _yukleniyor = true;
+  bool _ingilizceMi = false;
   final ImagePicker _picker = ImagePicker();
 
   // Finans Verileri
@@ -203,6 +203,47 @@ class _AnaIskeletState extends State<AnaIskelet> {
   List<SabitIhtiyac> _ihtiyaclar = [];
   List<WishUrun> _wishListesi = [];
 
+  // --- ÇİFT DİL (TR / EN) YARDIMCISI ---
+  String _t(String tr, String en) => _ingilizceMi ? en : tr;
+
+  String _kategoriEtiketi(String kat) {
+    if (!_ingilizceMi) return kat;
+    switch (kat) {
+      case 'Sabit Gelir':
+        return 'Recurring Income';
+      case 'Gelir':
+        return 'Income';
+      case 'Harcama':
+        return 'Expense';
+      case 'Yatırım':
+        return 'Savings';
+      case 'Zorunlu İhtiyaç':
+        return 'Essential Need';
+      case 'Keyfi Alışveriş':
+        return 'Impulse Purchase';
+      default:
+        return kat;
+    }
+  }
+
+  Future<void> _diliDegistir() async {
+    setState(() {
+      _ingilizceMi = !_ingilizceMi;
+    });
+    await _verileriKaydet();
+    await _suBildirimleriniPlanla(izinIste: false);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).clearSnackBars();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        duration: const Duration(seconds: 2),
+        content: Text(
+          _t('Dil Türkçe olarak ayarlandı.', 'Language switched to English.'),
+        ),
+      ),
+    );
+  }
+
   @override
   void initState() {
     super.initState();
@@ -221,6 +262,7 @@ class _AnaIskeletState extends State<AnaIskelet> {
     final kayitliTarih = prefs.getString('sonAktifTarih') ?? bugunAnahtar;
 
     setState(() {
+      _ingilizceMi = prefs.getBool('ingilizceMi') ?? false;
       _kasaBakiyesi = prefs.getDouble('kasaBakiyesi') ?? 0.0;
       _birikimHavuzu = prefs.getDouble('birikimHavuzu') ?? 0.0;
       _kurtarilanPara = prefs.getDouble('kurtarilanPara') ?? 0.0;
@@ -279,6 +321,7 @@ class _AnaIskeletState extends State<AnaIskelet> {
 
   Future<void> _verileriKaydet() async {
     final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('ingilizceMi', _ingilizceMi);
     await prefs.setDouble('kasaBakiyesi', _kasaBakiyesi);
     await prefs.setDouble('birikimHavuzu', _birikimHavuzu);
     await prefs.setDouble('kurtarilanPara', _kurtarilanPara);
@@ -314,22 +357,32 @@ class _AnaIskeletState extends State<AnaIskelet> {
     await bildirimMotoru.cancelAll();
     if (!_suHatirlaticiAktif) return;
 
-    const androidDetay = AndroidNotificationDetails(
+    final androidDetay = AndroidNotificationDetails(
       'sera_su_kanali',
-      'CFO Su Hatırlatıcıları',
-      channelDescription: 'Günlük su tüketimi ve sera nemi uyarıları',
+      _t('CFO Su Hatırlatıcıları', 'CFO Hydration Reminders'),
+      channelDescription: _t(
+        'Günlük su tüketimi ve sera nemi uyarıları',
+        'Daily water intake and greenhouse humidity alerts',
+      ),
       importance: Importance.high,
       priority: Priority.high,
       icon: '@mipmap/ic_launcher',
     );
-    const bildirimDetay = NotificationDetails(android: androidDetay);
+    final bildirimDetay = NotificationDetails(android: androidDetay);
 
-    final cfoSuMesajlari = [
-      'Sayın Kurucu, vücut rezervlerinde likidite düşüşü tespit edildi. Operasyonel verimlilik için 1 bardak (250 ml) su tüketin.',
-      'Sera Raporu: Bahçedeki bitkiler kadar sizin de suya ihtiyacınız var. Kalkıp 1 bardak su için!',
-      'CFO Uyarısı: Susuz kalan beyin bütçe hatası yapar. Kendinizi ve serayı nemlendirme zamanı.',
-      'Hatırlatma: Günlük su hedefinize ulaşmak bahçedeki çiy oranını %100 yapar. 250 ml ekleyin!',
-    ];
+    final cfoSuMesajlari = _ingilizceMi
+        ? [
+            'Founder, liquidity drop detected in body reserves. Drink 1 glass (250 ml) of water for peak efficiency.',
+            'Greenhouse Report: Your plants need water, and so do you. Grab a glass of water now!',
+            'CFO Alert: A dehydrated brain makes budget mistakes. Time to hydrate yourself and the greenhouse.',
+            'Reminder: Reaching your daily water goal boosts greenhouse dew to 100%. Add 250 ml!',
+          ]
+        : [
+            'Sayın Kurucu, vücut rezervlerinde likidite düşüşü tespit edildi. Operasyonel verimlilik için 1 bardak (250 ml) su tüketin.',
+            'Sera Raporu: Bahçedeki bitkiler kadar sizin de suya ihtiyacınız var. Kalkıp 1 bardak su için!',
+            'CFO Uyarısı: Susuz kalan beyin bütçe hatası yapar. Kendinizi ve serayı nemlendirme zamanı.',
+            'Hatırlatma: Günlük su hedefinize ulaşmak bahçedeki çiy oranını %100 yapar. 250 ml ekleyin!',
+          ];
 
     final simdi = tz.TZDateTime.now(tz.local);
     int planlananAdet = 0;
@@ -342,7 +395,7 @@ class _AnaIskeletState extends State<AnaIskelet> {
         final mesaj = cfoSuMesajlari[planlananAdet % cfoSuMesajlari.length];
         await bildirimMotoru.zonedSchedule(
           id: 1000 + planlananAdet,
-          title: '💧 CFO Hidrasyon Brifingi',
+          title: _t('💧 CFO Hidrasyon Brifingi', '💧 CFO Hydration Briefing'),
           body: mesaj,
           scheduledDate: hedefZaman,
           notificationDetails: bildirimDetay,
@@ -356,8 +409,13 @@ class _AnaIskeletState extends State<AnaIskelet> {
   Future<void> _testSuBildirimiGonder() async {
     if (!Platform.isAndroid) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Sistem bildirimleri Android telefonda çalışır; Windows üzerinde simüle edildi.'),
+        SnackBar(
+          content: Text(
+            _t(
+              'Sistem bildirimleri Android telefonda çalışır; Windows üzerinde simüle edildi.',
+              'System notifications run on Android devices; simulated on Windows.',
+            ),
+          ),
         ),
       );
       return;
@@ -367,10 +425,13 @@ class _AnaIskeletState extends State<AnaIskelet> {
         .resolvePlatformSpecificImplementation<AndroidFlutterLocalNotificationsPlugin>();
     await androidPlugin?.requestNotificationsPermission();
 
-    const androidDetay = AndroidNotificationDetails(
+    final androidDetay = AndroidNotificationDetails(
       'sera_su_kanali',
-      'CFO Su Hatırlatıcıları',
-      channelDescription: 'Günlük su tüketimi ve sera nemi uyarıları',
+      _t('CFO Su Hatırlatıcıları', 'CFO Hydration Reminders'),
+      channelDescription: _t(
+        'Günlük su tüketimi ve sera nemi uyarıları',
+        'Daily water intake and greenhouse humidity alerts',
+      ),
       importance: Importance.max,
       priority: Priority.high,
       icon: '@mipmap/ic_launcher',
@@ -378,9 +439,12 @@ class _AnaIskeletState extends State<AnaIskelet> {
 
     await bildirimMotoru.show(
       id: 999,
-      title: '💧 CFO Hidrasyon Testi',
-      body: 'Sayın Kurucu, bildirim hattı aktif! Serayı nemlendirmek için 1 bardak su içmeyi unutmayın.',
-      notificationDetails: const NotificationDetails(android: androidDetay),
+      title: _t('💧 CFO Hidrasyon Testi', '💧 CFO Hydration Test'),
+      body: _t(
+        'Sayın Kurucu, bildirim hattı aktif! Serayı nemlendirmek için 1 bardak su içmeyi unutmayın.',
+        'Founder, the notification line is live! Don\'t forget to drink a glass of water to humidify the greenhouse.',
+      ),
+      notificationDetails: NotificationDetails(android: androidDetay),
     );
   }
 
@@ -395,9 +459,14 @@ class _AnaIskeletState extends State<AnaIskelet> {
     if (!oncekiHedefTamamMi && _icilenSuMl >= _gunlukSuHedefiMl) {
       ScaffoldMessenger.of(context).clearSnackBars();
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          backgroundColor: Color(0xFF0284C7),
-          content: Text('💧 Günlük su hedefine ulaştın! Seradaki nem ve çiy oranı %100 oldu!'),
+        SnackBar(
+          backgroundColor: const Color(0xFF0284C7),
+          content: Text(
+            _t(
+              '💧 Günlük su hedefine ulaştın! Seradaki nem ve çiy oranı %100 oldu!',
+              '💧 Daily hydration goal reached! Greenhouse dew and humidity are now at 100%!',
+            ),
+          ),
         ),
       );
     }
@@ -415,11 +484,13 @@ class _AnaIskeletState extends State<AnaIskelet> {
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
           backgroundColor: const Color(0xFF162925),
-          title: const Row(
+          title: Row(
             children: [
-              Icon(Icons.water_drop_rounded, color: Color(0xFF38BDF8)),
-              SizedBox(width: 8),
-              Text('Su & CFO Bildirim Ayarları'),
+              const Icon(Icons.water_drop_rounded, color: Color(0xFF38BDF8)),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(_t('Su & CFO Bildirim Ayarları', 'Water & CFO Alert Settings')),
+              ),
             ],
           ),
           content: SingleChildScrollView(
@@ -429,13 +500,25 @@ class _AnaIskeletState extends State<AnaIskelet> {
               children: [
                 SwitchListTile(
                   contentPadding: EdgeInsets.zero,
-                  title: const Text('Arka Plan Hatırlatıcıları', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                  subtitle: const Text('Uygulama kapalıyken CFO su uyarısı gönderir', style: TextStyle(fontSize: 11)),
+                  title: Text(
+                    _t('Arka Plan Hatırlatıcıları', 'Background Reminders'),
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                  ),
+                  subtitle: Text(
+                    _t(
+                      'Uygulama kapalıyken CFO su uyarısı gönderir',
+                      'Sends CFO hydration alerts even when the app is closed',
+                    ),
+                    style: const TextStyle(fontSize: 11),
+                  ),
                   value: bildirimAcik,
                   onChanged: (val) => setDialogState(() => bildirimAcik = val),
                 ),
                 const Divider(),
-                const Text('Günlük Su Hedefi', style: TextStyle(fontSize: 12, color: Colors.white70)),
+                Text(
+                  _t('Günlük Su Hedefi', 'Daily Water Goal'),
+                  style: const TextStyle(fontSize: 12, color: Colors.white70),
+                ),
                 const SizedBox(height: 8),
                 Wrap(
                   spacing: 8,
@@ -453,13 +536,16 @@ class _AnaIskeletState extends State<AnaIskelet> {
                   }).toList(),
                 ),
                 const SizedBox(height: 14),
-                const Text('Hatırlatma Sıklığı', style: TextStyle(fontSize: 12, color: Colors.white70)),
+                Text(
+                  _t('Hatırlatma Sıklığı', 'Reminder Interval'),
+                  style: const TextStyle(fontSize: 12, color: Colors.white70),
+                ),
                 const SizedBox(height: 8),
                 Wrap(
                   spacing: 8,
                   children: [1, 2, 3, 4].map((saat) {
                     return ChoiceChip(
-                      label: Text('$saat Saatte Bir'),
+                      label: Text(_t('$saat Saatte Bir', 'Every ${saat}h')),
                       selected: secilenAralik == saat,
                       selectedColor: const Color(0xFF10B981),
                       labelStyle: TextStyle(
@@ -472,15 +558,22 @@ class _AnaIskeletState extends State<AnaIskelet> {
                   }).toList(),
                 ),
                 const SizedBox(height: 14),
-                const Text('Aktif Saatler (Gece Uyku Koruması)', style: TextStyle(fontSize: 12, color: Colors.white70)),
+                Text(
+                  _t('Aktif Saatler (Gece Uyku Koruması)', 'Active Hours (Sleep Protection)'),
+                  style: const TextStyle(fontSize: 12, color: Colors.white70),
+                ),
                 const SizedBox(height: 8),
                 Row(
                   children: [
                     Expanded(
                       child: DropdownButtonFormField<int>(
-                        initialValue: baslangic,
+                        value: baslangic,
                         dropdownColor: const Color(0xFF162925),
-                        decoration: const InputDecoration(labelText: 'Başlangıç', isDense: true, border: OutlineInputBorder()),
+                        decoration: InputDecoration(
+                          labelText: _t('Başlangıç', 'Start'),
+                          isDense: true,
+                          border: const OutlineInputBorder(),
+                        ),
                         items: List.generate(13, (i) => i + 6)
                             .map((h) => DropdownMenuItem(value: h, child: Text('${h.toString().padLeft(2, '0')}:00')))
                             .toList(),
@@ -492,9 +585,13 @@ class _AnaIskeletState extends State<AnaIskelet> {
                     const SizedBox(width: 10),
                     Expanded(
                       child: DropdownButtonFormField<int>(
-                        initialValue: bitis,
+                        value: bitis,
                         dropdownColor: const Color(0xFF162925),
-                        decoration: const InputDecoration(labelText: 'Bitiş', isDense: true, border: OutlineInputBorder()),
+                        decoration: InputDecoration(
+                          labelText: _t('Bitiş', 'End'),
+                          isDense: true,
+                          border: const OutlineInputBorder(),
+                        ),
                         items: List.generate(7, (i) => i + 18)
                             .map((h) => DropdownMenuItem(value: h, child: Text('${h.toString().padLeft(2, '0')}:00')))
                             .toList(),
@@ -511,14 +608,14 @@ class _AnaIskeletState extends State<AnaIskelet> {
                   child: OutlinedButton.icon(
                     onPressed: _testSuBildirimiGonder,
                     icon: const Icon(Icons.notifications_active_outlined, size: 18, color: Color(0xFFF59E0B)),
-                    label: const Text('Test Bildirimi Gönder'),
+                    label: Text(_t('Test Bildirimi Gönder', 'Send Test Notification')),
                   ),
                 ),
               ],
             ),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('İptal')),
+            TextButton(onPressed: () => Navigator.pop(ctx), child: Text(_t('İptal', 'Cancel'))),
             FilledButton(
               onPressed: () async {
                 setState(() {
@@ -536,13 +633,16 @@ class _AnaIskeletState extends State<AnaIskelet> {
                   SnackBar(
                     content: Text(
                       bildirimAcik
-                          ? 'CFO su hatırlatıcısı $_suBaslangicSaati:00 - $_suBitisSaati:00 arası $secilenAralik saatte bir kuruldu!'
-                          : 'Arka plan su bildirimleri kapatıldı.',
+                          ? _t(
+                              'CFO su hatırlatıcısı $_suBaslangicSaati:00 - $_suBitisSaati:00 arası $secilenAralik saatte bir kuruldu!',
+                              'CFO hydration alert scheduled every ${secilenAralik}h between $_suBaslangicSaati:00 - $_suBitisSaati:00!',
+                            )
+                          : _t('Arka plan su bildirimleri kapatıldı.', 'Background hydration alerts turned off.'),
                     ),
                   ),
                 );
               },
-              child: const Text('Kaydet'),
+              child: Text(_t('Kaydet', 'Save')),
             ),
           ],
         ),
@@ -575,17 +675,21 @@ class _AnaIskeletState extends State<AnaIskelet> {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: const Color(0xFF162925),
-        title: const Text('Temiz Başlangıç (Tümünü Sıfırla)'),
-        content: const Text(
-          'Kasadaki bakiye, bahçe birikimi, su sayacı, işlemler ve listelerin tamamı sıfırlanacak. Emin misiniz Sayın Kurucu?',
+        title: Text(_t('Temiz Başlangıç (Tümünü Sıfırla)', 'Clean Slate (Reset All)')),
+        content: Text(
+          _t(
+            'Kasadaki bakiye, bahçe birikimi, su sayacı, işlemler ve listelerin tamamı sıfırlanacak. Emin misiniz Sayın Kurucu?',
+            'Your vault balance, greenhouse savings, water counter, transactions, and lists will all be wiped. Are you sure, Founder?',
+          ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Vazgeç')),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: Text(_t('Vazgeç', 'Cancel'))),
           FilledButton(
             style: FilledButton.styleFrom(backgroundColor: const Color(0xFFEF4444)),
             onPressed: () async {
               final prefs = await SharedPreferences.getInstance();
               await prefs.clear();
+              await prefs.setBool('ingilizceMi', _ingilizceMi);
               if (!mounted) return;
               setState(() {
                 _kasaBakiyesi = 0.0;
@@ -602,10 +706,14 @@ class _AnaIskeletState extends State<AnaIskelet> {
               });
               Navigator.pop(ctx);
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Tüm kayıtlar temizlendi. Yeni dönem başladı!')),
+                SnackBar(
+                  content: Text(
+                    _t('Tüm kayıtlar temizlendi. Yeni dönem başladı!', 'All records cleared. A new cycle begins!'),
+                  ),
+                ),
               );
             },
-            child: const Text('Evet, Sıfırla'),
+            child: Text(_t('Evet, Sıfırla', 'Yes, Reset')),
           ),
         ],
       ),
@@ -647,18 +755,35 @@ class _AnaIskeletState extends State<AnaIskelet> {
 
   String get _cfoMesaji {
     if (_kasaBakiyesi == 0 && _birikimHavuzu == 0 && _islemler.isEmpty) {
-      return 'Hoş geldiniz Sayın Kurucu! İlk gelirinizi ve sabit ihtiyaçlarınızı girerek bütçe operasyonunu ve bahçenizi başlatabilirsiniz.';
+      return _t(
+        'Hoş geldiniz Sayın Kurucu! İlk gelirinizi ve sabit ihtiyaçlarınızı girerek bütçe operasyonunu ve bahçenizi başlatabilirsiniz.',
+        'Welcome, Founder! Log your first income and fixed expenses to launch your budget operations and grow your greenhouse.',
+      );
     }
     if (_bahceCurudu) {
-      return 'Sayın Kurucu, rezervleri keyfi harcamayla sıfırladığınız için sera kırağı yedi. Ekleyeceğiniz her ₺100 toprağı yeniden yeşertecek.';
+      return _t(
+        'Sayın Kurucu, rezervleri keyfi harcamayla sıfırladığınız için sera kırağı yedi. Ekleyeceğiniz her ₺100 toprağı yeniden yeşertecek.',
+        'Founder, draining reserves on impulse purchases caused frostbite in the greenhouse. Every ₺100 saved will revive the soil.',
+      );
     }
     if (_limitAsildiMi) {
-      return 'Dikkat Sayın Kurucu: Bugünkü limiti ₺${(_bugunHarcanan - _gunlukGuvenliLimit).toStringAsFixed(2)} aştık. Seradaki bitkiler susuzluktan boyun büktü, yarın frene basıyoruz.';
+      final asim = (_bugunHarcanan - _gunlukGuvenliLimit).toStringAsFixed(2);
+      return _t(
+        'Dikkat Sayın Kurucu: Bugünkü limiti ₺$asim aştık. Seradaki bitkiler susuzluktan boyun büktü, yarın frene basıyoruz.',
+        'Alert, Founder: Today\'s limit is exceeded by ₺$asim. Greenhouse plants are wilting from thirst—we hit the brakes tomorrow.',
+      );
     }
+    final netKalan = (_gunlukGuvenliLimit - _bugunHarcanan).clamp(0, 99999).toStringAsFixed(2);
     if (_odenmemisIhtiyacToplami > 0) {
-      return 'Sayın Kurucu, sabit giderler için ₺${_odenmemisIhtiyacToplami.toStringAsFixed(2)} kilitlendi. Ayın $_paraGelisGunu\'ine kadar ($_gelirGununeKalanGun gün) bugünkü net limitiniz ₺${(_gunlukGuvenliLimit - _bugunHarcanan).clamp(0, 99999).toStringAsFixed(2)}.';
+      return _t(
+        'Sayın Kurucu, sabit giderler için ₺${_odenmemisIhtiyacToplami.toStringAsFixed(2)} kilitlendi. Ayın $_paraGelisGunu\'ine kadar ($_gelirGununeKalanGun gün) bugünkü net limitiniz ₺$netKalan.',
+        'Founder, ₺${_odenmemisIhtiyacToplami.toStringAsFixed(2)} is locked for fixed bills. With $_gelirGununeKalanGun days until payday (day $_paraGelisGunu), your safe limit today is ₺$netKalan.',
+      );
     }
-    return 'Tüm sabit yükümlülükler temizlendi Sayın Kurucu! Ayın $_paraGelisGunu\'ine kadar kasa kontrol altında, bahçedeki her ₺100 yeni bir yaşam filizlendiriyor.';
+    return _t(
+      'Tüm sabit yükümlülükler temizlendi Sayın Kurucu! Ayın $_paraGelisGunu\'ine kadar kasa kontrol altında, bahçedeki her ₺100 yeni bir yaşam filizlendiriyor.',
+      'All fixed obligations are cleared, Founder! Cash flow is locked in until day $_paraGelisGunu, and every ₺100 saved sprouts new life in the garden.',
+    );
   }
 
   // --- PARA GELİŞ GÜNÜ SEÇİCİ ---
@@ -669,20 +794,23 @@ class _AnaIskeletState extends State<AnaIskelet> {
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
           backgroundColor: const Color(0xFF162925),
-          title: const Row(
+          title: Row(
             children: [
-              Icon(Icons.event_repeat_rounded, color: Color(0xFFF59E0B)),
-              SizedBox(width: 8),
-              Text('Para Geliş Günü'),
+              const Icon(Icons.event_repeat_rounded, color: Color(0xFFF59E0B)),
+              const SizedBox(width: 8),
+              Text(_t('Para Geliş Günü', 'Next Payday')),
             ],
           ),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text(
-                'Burs, maaş veya harçlığın ayın kaçında yatıyor? Günlük harcama limitin bu güne kalan gün sayısına bölünür.',
-                style: TextStyle(fontSize: 13, color: Colors.white70),
+              Text(
+                _t(
+                  'Burs, maaş veya harçlığın ayın kaçında yatıyor? Günlük harcama limitin bu güne kalan gün sayısına bölünür.',
+                  'Which day of the month does your allowance, grant, or salary arrive? Your daily limit is divided across the remaining days.',
+                ),
+                style: const TextStyle(fontSize: 13, color: Colors.white70),
               ),
               const SizedBox(height: 16),
               Wrap(
@@ -719,14 +847,14 @@ class _AnaIskeletState extends State<AnaIskelet> {
             ],
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('İptal')),
+            TextButton(onPressed: () => Navigator.pop(ctx), child: Text(_t('İptal', 'Cancel'))),
             FilledButton(
               onPressed: () {
                 setState(() => _paraGelisGunu = secilenGun);
                 _verileriKaydet();
                 Navigator.pop(ctx);
               },
-              child: Text('Ayın $secilenGun\'i Olarak Ayarla'),
+              child: Text(_t('Ayın $secilenGun\'i Olarak Ayarla', 'Set as Day $secilenGun')),
             ),
           ],
         ),
@@ -737,7 +865,7 @@ class _AnaIskeletState extends State<AnaIskelet> {
   // --- SABİT GELİR FONKSİYONLARI ---
   void _sabitGelirUygula(SabitGelir gelir) {
     final yeniIslem = Islem(
-      baslik: '${gelir.ad} (Sabit)',
+      baslik: '${gelir.ad} (${_t("Sabit", "Preset")})',
       tutar: gelir.tutar,
       gelirMi: true,
       kategori: 'Sabit Gelir',
@@ -753,9 +881,14 @@ class _AnaIskeletState extends State<AnaIskelet> {
     ScaffoldMessenger.of(context).clearSnackBars();
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('${gelir.ad} (+₺${gelir.tutar.toStringAsFixed(0)}) kasaya eklendi!'),
+        content: Text(
+          _t(
+            '${gelir.ad} (+₺${gelir.tutar.toStringAsFixed(0)}) kasaya eklendi!',
+            '${gelir.ad} (+₺${gelir.tutar.toStringAsFixed(0)}) added to vault!',
+          ),
+        ),
         action: SnackBarAction(
-          label: 'Geri Al',
+          label: _t('Geri Al', 'Undo'),
           onPressed: () {
             setState(() {
               _kasaBakiyesi = (_kasaBakiyesi - gelir.tutar).clamp(0.0, double.infinity);
@@ -777,16 +910,19 @@ class _AnaIskeletState extends State<AnaIskelet> {
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
           backgroundColor: const Color(0xFF162925),
-          title: const Text('Sabit Gelir Şablonları'),
+          title: Text(_t('Sabit Gelir Şablonları', 'Recurring Income Presets')),
           content: SizedBox(
             width: 360,
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
                 if (_sabitGelirler.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 12),
-                    child: Text('Henüz sabit gelir şablonu eklenmedi.', style: TextStyle(color: Colors.white60)),
+                  Padding(
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    child: Text(
+                      _t('Henüz sabit gelir şablonu eklenmedi.', 'No recurring income presets added yet.'),
+                      style: const TextStyle(color: Colors.white60),
+                    ),
                   )
                 else
                   ..._sabitGelirler.map(
@@ -808,9 +944,9 @@ class _AnaIskeletState extends State<AnaIskelet> {
                 const Divider(height: 24),
                 TextField(
                   controller: adCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Yeni Sabit Gelir Adı (Örn: Burs)',
-                    border: OutlineInputBorder(),
+                  decoration: InputDecoration(
+                    labelText: _t('Yeni Sabit Gelir Adı (Örn: Burs)', 'Preset Name (e.g. Grant)'),
+                    border: const OutlineInputBorder(),
                     isDense: true,
                   ),
                 ),
@@ -818,9 +954,9 @@ class _AnaIskeletState extends State<AnaIskelet> {
                 TextField(
                   controller: tutarCtrl,
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  decoration: const InputDecoration(
-                    labelText: 'Tutar (₺) - Örn: 4000',
-                    border: OutlineInputBorder(),
+                  decoration: InputDecoration(
+                    labelText: _t('Tutar (₺) - Örn: 4000', 'Amount (₺) - e.g. 4000'),
+                    border: const OutlineInputBorder(),
                     isDense: true,
                   ),
                 ),
@@ -828,10 +964,10 @@ class _AnaIskeletState extends State<AnaIskelet> {
             ),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Kapat')),
+            TextButton(onPressed: () => Navigator.pop(ctx), child: Text(_t('Kapat', 'Close'))),
             FilledButton.icon(
               icon: const Icon(Icons.add, size: 18),
-              label: const Text('Şablon Ekle'),
+              label: Text(_t('Şablon Ekle', 'Add Preset')),
               onPressed: () {
                 final tutar = double.tryParse(tutarCtrl.text.replaceAll(',', '.')) ?? 0;
                 if (adCtrl.text.trim().isEmpty || tutar <= 0) return;
@@ -859,14 +995,20 @@ class _AnaIskeletState extends State<AnaIskelet> {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: const Color(0xFF162925),
-        title: Text(gelirMi ? 'Kasaya Gelir Ekle' : 'Kuruşu Kuruşuna Harcama Gir'),
+        title: Text(
+          gelirMi
+              ? _t('Kasaya Gelir Ekle', 'Add Income to Vault')
+              : _t('Kuruşu Kuruşuna Harcama Gir', 'Log Penny-by-Penny Expense'),
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             TextField(
               controller: baslikCtrl,
               decoration: InputDecoration(
-                labelText: gelirMi ? 'Gelir Kaynağı (Örn: Ek İş)' : 'Nereye Harcandı? (Örn: Yemek)',
+                labelText: gelirMi
+                    ? _t('Gelir Kaynağı (Örn: Ek İş)', 'Income Source (e.g. Freelance)')
+                    : _t('Nereye Harcandı? (Örn: Yemek)', 'Description (e.g. Lunch)'),
                 border: const OutlineInputBorder(),
               ),
             ),
@@ -874,9 +1016,9 @@ class _AnaIskeletState extends State<AnaIskelet> {
             TextField(
               controller: tutarCtrl,
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(
-                labelText: 'Tutar (₺) - Örn: 142.50',
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: _t('Tutar (₺) - Örn: 142.50', 'Amount (₺) - e.g. 142.50'),
+                border: const OutlineInputBorder(),
               ),
             ),
           ],
@@ -884,7 +1026,7 @@ class _AnaIskeletState extends State<AnaIskelet> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('İptal'),
+            child: Text(_t('İptal', 'Cancel')),
           ),
           FilledButton(
             onPressed: () {
@@ -911,7 +1053,7 @@ class _AnaIskeletState extends State<AnaIskelet> {
                 _harcamaKaydetVeYuvarlaSor(baslikCtrl.text.trim(), tutar);
               }
             },
-            child: const Text('Kaydet'),
+            child: Text(_t('Kaydet', 'Save')),
           ),
         ],
       ),
@@ -944,20 +1086,23 @@ class _AnaIskeletState extends State<AnaIskelet> {
         context: context,
         builder: (ctx) => AlertDialog(
           backgroundColor: const Color(0xFF162925),
-          title: const Row(
+          title: Row(
             children: [
-              Icon(Icons.water_drop_rounded, color: Color(0xFF10B981)),
-              SizedBox(width: 8),
-              Text('CFO Küsurat Teklifi'),
+              const Icon(Icons.water_drop_rounded, color: Color(0xFF10B981)),
+              const SizedBox(width: 8),
+              Text(_t('CFO Küsurat Teklifi', 'CFO Round-Up Offer')),
             ],
           ),
           content: Text(
-            'Harcamayı ₺${ustOnluk.toStringAsFixed(0)} seviyesine yuvarlayıp aradaki ₺${fark.toStringAsFixed(2)} küsuratı bahçeye can suyu olarak aktaralım mı?',
+            _t(
+              'Harcamayı ₺${ustOnluk.toStringAsFixed(0)} seviyesine yuvarlayıp aradaki ₺${fark.toStringAsFixed(2)} küsuratı bahçeye can suyu olarak aktaralım mı?',
+              'Round this expense up to ₺${ustOnluk.toStringAsFixed(0)} and pour the ₺${fark.toStringAsFixed(2)} spare change into your garden?',
+            ),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: const Text('Kalsın'),
+              child: Text(_t('Kalsın', 'Skip')),
             ),
             FilledButton(
               onPressed: () {
@@ -969,7 +1114,7 @@ class _AnaIskeletState extends State<AnaIskelet> {
                 _verileriKaydet();
                 Navigator.pop(ctx);
               },
-              child: const Text('Bahçeye Aktar'),
+              child: Text(_t('Bahçeye Aktar', 'Water Garden')),
             ),
           ],
         ),
@@ -983,21 +1128,27 @@ class _AnaIskeletState extends State<AnaIskelet> {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: const Color(0xFF162925),
-        title: const Text('Seraya Sermaye Aktar'),
+        title: Text(_t('Seraya Sermaye Aktar', 'Invest in Greenhouse')),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Eklediğin her ₺100 bahçede yeni bir bitki, çiçek veya ağaç dalı filizlendirir.',
-              style: TextStyle(fontSize: 12, color: Colors.white70),
+            Text(
+              _t(
+                'Eklediğin her ₺100 bahçede yeni bir bitki, çiçek veya ağaç dalı filizlendirir.',
+                'Every ₺100 added sprouts a new plant, flower, or tree branch in your garden.',
+              ),
+              style: const TextStyle(fontSize: 12, color: Colors.white70),
             ),
             const SizedBox(height: 12),
             TextField(
               controller: tutarCtrl,
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
               decoration: InputDecoration(
-                labelText: 'Tutar (Maks: ₺${_kasaBakiyesi.toStringAsFixed(0)})',
+                labelText: _t(
+                  'Tutar (Maks: ₺${_kasaBakiyesi.toStringAsFixed(0)})',
+                  'Amount (Max: ₺${_kasaBakiyesi.toStringAsFixed(0)})',
+                ),
                 border: const OutlineInputBorder(),
               ),
             ),
@@ -1018,7 +1169,7 @@ class _AnaIskeletState extends State<AnaIskelet> {
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Vazgeç')),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: Text(_t('Vazgeç', 'Cancel'))),
           FilledButton(
             onPressed: () {
               final tutar = double.tryParse(tutarCtrl.text.replaceAll(',', '.')) ?? 0;
@@ -1030,7 +1181,7 @@ class _AnaIskeletState extends State<AnaIskelet> {
                 _islemler.insert(
                   0,
                   Islem(
-                    baslik: 'Birikim Bahçesine Transfer',
+                    baslik: _t('Birikim Bahçesine Transfer', 'Transfer to Savings Garden'),
                     tutar: tutar,
                     gelirMi: false,
                     kategori: 'Yatırım',
@@ -1041,7 +1192,7 @@ class _AnaIskeletState extends State<AnaIskelet> {
               _verileriKaydet();
               Navigator.pop(ctx);
             },
-            child: const Text('Bahçeyi Besle'),
+            child: Text(_t('Bahçeyi Besle', 'Feed Garden')),
           ),
         ],
       ),
@@ -1054,14 +1205,19 @@ class _AnaIskeletState extends State<AnaIskelet> {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: const Color(0xFF162925),
-        title: const Text('Birikimi Sıfırlama Kararı'),
+        title: Text(_t('Birikimi Sıfırlama Kararı', 'Withdraw Savings Pool')),
         content: Text(
-          'Kasada ₺${_birikimHavuzu.toStringAsFixed(2)} birikmiş sermayen var. Bu parayı ne amaçla çekiyorsun?',
+          _t(
+            'Kasada ₺${_birikimHavuzu.toStringAsFixed(2)} birikmiş sermayen var. Bu parayı ne amaçla çekiyorsun?',
+            'You have ₺${_birikimHavuzu.toStringAsFixed(2)} in your savings pool. Why are you withdrawing it?',
+          ),
         ),
         actions: [
           OutlinedButton.icon(
             icon: const Icon(Icons.verified_rounded, color: Color(0xFF10B981)),
-            label: const Text('Gerekli / Yatırım İçin (Bitkileri Koru)'),
+            label: Text(
+              _t('Gerekli / Yatırım İçin (Bitkileri Koru)', 'Essential / Investment (Protect Flora)'),
+            ),
             onPressed: () {
               setState(() {
                 _kasaBakiyesi += _birikimHavuzu;
@@ -1070,8 +1226,13 @@ class _AnaIskeletState extends State<AnaIskelet> {
               _verileriKaydet();
               Navigator.pop(ctx);
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('CFO Onaylı Stratejik Harcama: Toprak verimi koruma altına alındı!'),
+                SnackBar(
+                  content: Text(
+                    _t(
+                      'CFO Onaylı Stratejik Harcama: Toprak verimi koruma altına alındı!',
+                      'CFO-Approved Strategic Spend: Soil fertility protected!',
+                    ),
+                  ),
                 ),
               );
             },
@@ -1079,7 +1240,9 @@ class _AnaIskeletState extends State<AnaIskelet> {
           FilledButton.icon(
             style: FilledButton.styleFrom(backgroundColor: const Color(0xFFEF4444)),
             icon: const Icon(Icons.local_fire_department_rounded),
-            label: const Text('Boş Beleş Harcadım (Bahçe Çürüsün)'),
+            label: Text(
+              _t('Boş Beleş Harcadım (Bahçe Çürüsün)', 'Impulse Spend (Freeze Garden)'),
+            ),
             onPressed: () {
               setState(() {
                 _kasaBakiyesi += _birikimHavuzu;
@@ -1121,14 +1284,17 @@ class _AnaIskeletState extends State<AnaIskelet> {
             title: const Row(
               children: [
                 Icon(Icons.spa_rounded, color: Color(0xFF10B981)),
-                SizedBox(width: 10),
-                Text(
-                  'SERA FİNANS',
-                  style: TextStyle(fontWeight: FontWeight.w800, letterSpacing: 1.2, fontSize: 18),
-                ),
                 SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    'SERA FİNANS',
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(fontWeight: FontWeight.w800, letterSpacing: 1.1, fontSize: 17),
+                  ),
+                ),
+                SizedBox(width: 6),
                 Chip(
-                  label: Text('CFO', style: TextStyle(fontSize: 11, color: Color(0xFFF59E0B))),
+                  label: Text('CFO', style: TextStyle(fontSize: 10, color: Color(0xFFF59E0B))),
                   backgroundColor: Color(0xFF1D332E),
                   side: BorderSide.none,
                   padding: EdgeInsets.zero,
@@ -1136,8 +1302,26 @@ class _AnaIskeletState extends State<AnaIskelet> {
               ],
             ),
             actions: [
+              // DİL DEĞİŞTİRME BUTONU (TR / EN)
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                child: OutlinedButton(
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: const Color(0xFF34D399),
+                    side: const BorderSide(color: Color(0xFF284B43)),
+                    padding: const EdgeInsets.symmetric(horizontal: 10),
+                    minimumSize: Size.zero,
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  onPressed: _diliDegistir,
+                  child: Text(
+                    _ingilizceMi ? 'TR' : 'EN',
+                    style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 12),
+                  ),
+                ),
+              ),
               IconButton(
-                tooltip: 'Su & Bildirim Ayarları',
+                tooltip: _t('Su & Bildirim Ayarları', 'Water & Alert Settings'),
                 icon: Icon(
                   _suHatirlaticiAktif ? Icons.notifications_active_rounded : Icons.notifications_off_outlined,
                   color: _suHatirlaticiAktif ? const Color(0xFF38BDF8) : Colors.white54,
@@ -1145,7 +1329,7 @@ class _AnaIskeletState extends State<AnaIskelet> {
                 onPressed: _suAyarlariDialog,
               ),
               IconButton(
-                tooltip: 'Temiz Başlangıç (Tümünü Sıfırla)',
+                tooltip: _t('Temiz Başlangıç (Tümünü Sıfırla)', 'Clean Slate (Reset All)'),
                 icon: const Icon(Icons.delete_sweep_outlined, color: Colors.white54),
                 onPressed: _tumVerileriSifirlaDialog,
               ),
@@ -1159,21 +1343,21 @@ class _AnaIskeletState extends State<AnaIskelet> {
                   selectedIndex: _seciliSekme,
                   onDestinationSelected: (i) => setState(() => _seciliSekme = i),
                   labelType: NavigationRailLabelType.all,
-                  destinations: const [
+                  destinations: [
                     NavigationRailDestination(
-                      icon: Icon(Icons.yard_outlined),
-                      selectedIcon: Icon(Icons.yard_rounded),
-                      label: Text('Sera & Kasa'),
+                      icon: const Icon(Icons.yard_outlined),
+                      selectedIcon: const Icon(Icons.yard_rounded),
+                      label: Text(_t('Sera & Kasa', 'Greenhouse')),
                     ),
                     NavigationRailDestination(
-                      icon: Icon(Icons.checklist_rtl_outlined),
-                      selectedIcon: Icon(Icons.checklist_rtl_rounded),
-                      label: Text('İhtiyaçlar'),
+                      icon: const Icon(Icons.checklist_rtl_outlined),
+                      selectedIcon: const Icon(Icons.checklist_rtl_rounded),
+                      label: Text(_t('İhtiyaçlar', 'Fixed Needs')),
                     ),
                     NavigationRailDestination(
-                      icon: Icon(Icons.photo_library_outlined),
-                      selectedIcon: Icon(Icons.photo_library_rounded),
-                      label: Text('Wish Albüm'),
+                      icon: const Icon(Icons.photo_library_outlined),
+                      selectedIcon: const Icon(Icons.photo_library_rounded),
+                      label: Text(_t('Wish Albüm', 'Wish Album')),
                     ),
                   ],
                 ),
@@ -1186,10 +1370,19 @@ class _AnaIskeletState extends State<AnaIskelet> {
                   backgroundColor: const Color(0xFF0E1C19),
                   selectedIndex: _seciliSekme,
                   onDestinationSelected: (i) => setState(() => _seciliSekme = i),
-                  destinations: const [
-                    NavigationDestination(icon: Icon(Icons.yard_rounded), label: 'Sera & Kasa'),
-                    NavigationDestination(icon: Icon(Icons.checklist_rtl_rounded), label: 'İhtiyaçlar'),
-                    NavigationDestination(icon: Icon(Icons.photo_library_rounded), label: 'Wish Albüm'),
+                  destinations: [
+                    NavigationDestination(
+                      icon: const Icon(Icons.yard_rounded),
+                      label: _t('Sera & Kasa', 'Greenhouse'),
+                    ),
+                    NavigationDestination(
+                      icon: const Icon(Icons.checklist_rtl_rounded),
+                      label: _t('İhtiyaçlar', 'Fixed Needs'),
+                    ),
+                    NavigationDestination(
+                      icon: const Icon(Icons.photo_library_rounded),
+                      label: _t('Wish Albüm', 'Wish Album'),
+                    ),
                   ],
                 ),
         );
@@ -1214,7 +1407,7 @@ class _AnaIskeletState extends State<AnaIskelet> {
           children: [
             Expanded(
               child: _miniMetrikKart(
-                baslik: 'Nakit Kasa',
+                baslik: _t('Nakit Kasa', 'Cash Vault'),
                 deger: '₺${_kasaBakiyesi.toStringAsFixed(2)}',
                 altBilgi: 'Net: ₺${_harcanabilirNetBakiye.toStringAsFixed(0)}',
                 ikon: Icons.account_balance_wallet_rounded,
@@ -1227,9 +1420,12 @@ class _AnaIskeletState extends State<AnaIskelet> {
                 onTap: _paraGelisGunuSecDialog,
                 borderRadius: BorderRadius.circular(18),
                 child: _miniMetrikKart(
-                  baslik: 'Bugünkü Limit',
+                  baslik: _t('Bugünkü Limit', 'Today\'s Limit'),
                   deger: '₺${kalanGunluk.toStringAsFixed(2)}',
-                  altBilgi: 'Ayın $_paraGelisGunu\'ine $_gelirGununeKalanGun gün ✎',
+                  altBilgi: _t(
+                    'Ayın $_paraGelisGunu\'ine $_gelirGununeKalanGun gün ✎',
+                    '$_gelirGununeKalanGun d to day $_paraGelisGunu ✎',
+                  ),
                   ikon: Icons.event_repeat_rounded,
                   renk: _limitAsildiMi ? const Color(0xFFEF4444) : const Color(0xFFF59E0B),
                 ),
@@ -1251,7 +1447,10 @@ class _AnaIskeletState extends State<AnaIskelet> {
                 ),
                 onPressed: () => _islemEkleDialog(true),
                 icon: const Icon(Icons.add_circle_rounded, size: 19),
-                label: const Text('Gelir Ekle', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                label: Text(
+                  _t('Gelir Ekle', 'Income'),
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                ),
               ),
             ),
             const SizedBox(width: 8),
@@ -1265,7 +1464,10 @@ class _AnaIskeletState extends State<AnaIskelet> {
                 ),
                 onPressed: _sabitGelirYonetDialog,
                 icon: const Icon(Icons.bolt_rounded, size: 18),
-                label: const Text('Sabitler', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                label: Text(
+                  _t('Sabitler', 'Presets'),
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                ),
               ),
             ),
             const SizedBox(width: 8),
@@ -1279,7 +1481,10 @@ class _AnaIskeletState extends State<AnaIskelet> {
                 ),
                 onPressed: () => _islemEkleDialog(false),
                 icon: const Icon(Icons.remove_circle_outline_rounded, color: Color(0xFFF59E0B), size: 19),
-                label: const Text('Harcama', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                label: Text(
+                  _t('Harcama', 'Expense'),
+                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                ),
               ),
             ),
           ],
@@ -1332,9 +1537,9 @@ class _AnaIskeletState extends State<AnaIskelet> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        'ÖZEL FİNANS DİREKTÖRÜ (CFO)',
-                        style: TextStyle(
+                      Text(
+                        _t('ÖZEL FİNANS DİREKTÖRÜ (CFO)', 'PERSONAL CHIEF FINANCIAL OFFICER (CFO)'),
+                        style: const TextStyle(
                           fontSize: 10,
                           fontWeight: FontWeight.bold,
                           color: Color(0xFFF59E0B),
@@ -1358,12 +1563,15 @@ class _AnaIskeletState extends State<AnaIskelet> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            const Text(
-              'Kuruşu Kuruşuna İşlemler',
-              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            Text(
+              _t('Kuruşu Kuruşuna İşlemler', 'Penny-by-Penny Ledger'),
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
             Text(
-              'Kurtarılan: ₺${_kurtarilanPara.toStringAsFixed(0)}',
+              _t(
+                'Kurtarılan: ₺${_kurtarilanPara.toStringAsFixed(0)}',
+                'Saved: ₺${_kurtarilanPara.toStringAsFixed(0)}',
+              ),
               style: const TextStyle(fontSize: 12, color: Color(0xFF34D399), fontWeight: FontWeight.w600),
             ),
           ],
@@ -1371,12 +1579,15 @@ class _AnaIskeletState extends State<AnaIskelet> {
         const SizedBox(height: 10),
 
         if (_islemler.isEmpty)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 28),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 28),
             child: Center(
               child: Text(
-                'Henüz işlem kaydı yok. Gelir veya harcama ekleyerek başlayabilirsin.',
-                style: TextStyle(color: Colors.white54, fontSize: 13),
+                _t(
+                  'Henüz işlem kaydı yok. Gelir veya harcama ekleyerek başlayabilirsin.',
+                  'No transactions logged yet. Add an income or expense to begin.',
+                ),
+                style: const TextStyle(color: Colors.white54, fontSize: 13),
               ),
             ),
           )
@@ -1398,7 +1609,7 @@ class _AnaIskeletState extends State<AnaIskelet> {
                   ),
                 ),
                 title: Text(islem.baslik, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14)),
-                subtitle: Text(islem.kategori, style: const TextStyle(fontSize: 12)),
+                subtitle: Text(_kategoriEtiketi(islem.kategori), style: const TextStyle(fontSize: 12)),
                 trailing: Text(
                   '${islem.gelirMi ? '+' : '-'}₺${islem.tutar.toStringAsFixed(2)}',
                   style: TextStyle(
@@ -1450,9 +1661,12 @@ class _AnaIskeletState extends State<AnaIskelet> {
                 children: [
                   Row(
                     children: [
-                      const Text(
-                        'Günlük Su & Sera Nemi',
-                        style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
+                      Flexible(
+                        child: Text(
+                          _t('Günlük Su & Sera Nemi', 'Daily Water & Dew'),
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white),
+                        ),
                       ),
                       const SizedBox(width: 6),
                       Text(
@@ -1463,7 +1677,7 @@ class _AnaIskeletState extends State<AnaIskelet> {
                   ),
                   const SizedBox(height: 3),
                   Text(
-                    '$litreIcilen / $litreHedef L • ${_suHatirlaticiAktif ? "$_suHatirlatmaAraligiSaat sa. bir uyarı" : "Uyarı kapalı"}',
+                    '$litreIcilen / $litreHedef L • ${_suHatirlaticiAktif ? _t("$_suHatirlatmaAraligiSaat sa. bir uyarı", "Every ${_suHatirlatmaAraligiSaat}h") : _t("Uyarı kapalı", "Alerts off")}',
                     style: const TextStyle(fontSize: 11, color: Colors.white60),
                   ),
                   const SizedBox(height: 6),
@@ -1480,7 +1694,7 @@ class _AnaIskeletState extends State<AnaIskelet> {
             const SizedBox(width: 8),
             if (_icilenSuMl >= 250)
               IconButton(
-                tooltip: '1 Bardak Geri Al',
+                tooltip: _t('1 Bardak Geri Al', 'Undo 1 Glass'),
                 padding: EdgeInsets.zero,
                 constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
                 icon: const Icon(Icons.remove_circle_outline_rounded, size: 19, color: Colors.white54),
@@ -1497,7 +1711,7 @@ class _AnaIskeletState extends State<AnaIskelet> {
               child: const Text('+250 ml', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
             ),
             IconButton(
-              tooltip: 'Su & Bildirim Ayarları',
+              tooltip: _t('Su & Bildirim Ayarları', 'Water & Alert Settings'),
               padding: EdgeInsets.zero,
               constraints: const BoxConstraints(minWidth: 32, minHeight: 32),
               icon: const Icon(Icons.tune_rounded, size: 18, color: Colors.white70),
@@ -1517,19 +1731,19 @@ class _AnaIskeletState extends State<AnaIskelet> {
 
     String ekosistemDurumu;
     if (_bahceCurudu) {
-      ekosistemDurumu = 'Kırağı Yemiş Toprak';
+      ekosistemDurumu = _t('Kırağı Yemiş Toprak', 'Frostbitten Soil');
     } else if (_limitAsildiMi) {
-      ekosistemDurumu = 'Susuz • Yapraklar Solgun';
+      ekosistemDurumu = _t('Susuz • Yapraklar Solgun', 'Dehydrated • Wilting Leaves');
     } else if (canliOgeSayisi == 0) {
-      ekosistemDurumu = 'Taze Ekilmiş Sera Toprağı';
+      ekosistemDurumu = _t('Taze Ekilmiş Sera Toprağı', 'Freshly Seeded Greenhouse');
     } else if (canliOgeSayisi < 10) {
-      ekosistemDurumu = 'Filizlenen Botanik Bahçe';
+      ekosistemDurumu = _t('Filizlenen Botanik Bahçe', 'Sprouting Botanical Garden');
     } else if (canliOgeSayisi < 30) {
-      ekosistemDurumu = 'Gelişen Egzotik Ekosistem';
+      ekosistemDurumu = _t('Gelişen Egzotik Ekosistem', 'Thriving Exotic Ecosystem');
     } else if (canliOgeSayisi < 80) {
-      ekosistemDurumu = 'Biyolüminesans Yağmur Ormanı';
+      ekosistemDurumu = _t('Biyolüminesans Yağmur Ormanı', 'Bioluminescent Rainforest');
     } else {
-      ekosistemDurumu = 'Kadim Zümrüt Cenneti';
+      ekosistemDurumu = _t('Kadim Zümrüt Cenneti', 'Ancient Emerald Sanctuary');
     }
 
     return Container(
@@ -1580,8 +1794,11 @@ class _AnaIskeletState extends State<AnaIskelet> {
                         const SizedBox(height: 2),
                         Text(
                           _bahceCurudu
-                              ? 'Canlandırmak için ₺100+ ekle'
-                              : '$canliOgeSayisi Canlı Flora • Nem %${(_suTamamlanmaOrani * 100).toStringAsFixed(0)}',
+                              ? _t('Canlandırmak için ₺100+ ekle', 'Add ₺100+ to revive')
+                              : _t(
+                                  '$canliOgeSayisi Canlı Flora • Nem %${(_suTamamlanmaOrani * 100).toStringAsFixed(0)}',
+                                  '$canliOgeSayisi Live Flora • Dew %${(_suTamamlanmaOrani * 100).toStringAsFixed(0)}',
+                                ),
                           style: const TextStyle(fontSize: 10, color: Colors.white70),
                         ),
                       ],
@@ -1601,7 +1818,10 @@ class _AnaIskeletState extends State<AnaIskelet> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
-                        const Text('BİRİKİM HAVUZU', style: TextStyle(fontSize: 9, color: Colors.white60)),
+                        Text(
+                          _t('BİRİKİM HAVUZU', 'SAVINGS POOL'),
+                          style: const TextStyle(fontSize: 9, color: Colors.white60),
+                        ),
                         Text(
                           '₺${_birikimHavuzu.toStringAsFixed(2)}',
                           style: const TextStyle(
@@ -1631,7 +1851,10 @@ class _AnaIskeletState extends State<AnaIskelet> {
                     ),
                     onPressed: _birikimeAktarDialog,
                     icon: const Icon(Icons.water_drop_rounded, size: 18),
-                    label: const Text('Bahçeye Para At (+₺100)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13)),
+                    label: Text(
+                      _t('Bahçeye Para At (+₺100)', 'Feed Garden (+₺100)'),
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                    ),
                   ),
                 ),
                 const SizedBox(width: 10),
@@ -1643,7 +1866,7 @@ class _AnaIskeletState extends State<AnaIskelet> {
                   ),
                   onPressed: _birikimiBozDialog,
                   icon: const Icon(Icons.restart_alt_rounded, size: 18, color: Color(0xFFEF4444)),
-                  label: const Text('Sıfırla', style: TextStyle(fontSize: 13)),
+                  label: Text(_t('Sıfırla', 'Reset'), style: const TextStyle(fontSize: 13)),
                 ),
               ],
             ),
@@ -1700,7 +1923,10 @@ class _AnaIskeletState extends State<AnaIskelet> {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Kilitli İhtiyaç Rezervi', style: TextStyle(color: Colors.white70)),
+                    Text(
+                      _t('Kilitli İhtiyaç Rezervi', 'Locked Needs Reserve'),
+                      style: const TextStyle(color: Colors.white70),
+                    ),
                     const SizedBox(height: 4),
                     Text(
                       '₺${_odenmemisIhtiyacToplami.toStringAsFixed(2)}',
@@ -1715,7 +1941,7 @@ class _AnaIskeletState extends State<AnaIskelet> {
                 FilledButton.icon(
                   onPressed: _yeniIhtiyacEkleDialog,
                   icon: const Icon(Icons.add),
-                  label: const Text('İhtiyaç Ekle'),
+                  label: Text(_t('İhtiyaç Ekle', 'Add Need')),
                 ),
               ],
             ),
@@ -1723,13 +1949,16 @@ class _AnaIskeletState extends State<AnaIskelet> {
         ),
         const SizedBox(height: 14),
         if (_ihtiyaclar.isEmpty)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 42),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 42),
             child: Center(
               child: Text(
-                'Henüz zorunlu ihtiyaç eklenmedi. Yurt, fatura, erzak gibi giderleri buraya ekleyebilirsin.',
+                _t(
+                  'Henüz zorunlu ihtiyaç eklenmedi. Yurt, fatura, erzak gibi giderleri buraya ekleyebilirsin.',
+                  'No fixed expenses added yet. Add rent, bills, or groceries here to lock their budget.',
+                ),
                 textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.white54),
+                style: const TextStyle(color: Colors.white54),
               ),
             ),
           ),
@@ -1753,7 +1982,12 @@ class _AnaIskeletState extends State<AnaIskelet> {
                   decoration: item.odendi ? TextDecoration.lineThrough : null,
                 ),
               ),
-              subtitle: Text('Durum: ${item.sonGun} • Tutar: ₺${item.tutar.toStringAsFixed(2)}'),
+              subtitle: Text(
+                _t(
+                  'Durum: ${item.sonGun} • Tutar: ₺${item.tutar.toStringAsFixed(2)}',
+                  'Due: ${item.sonGun} • Amount: ₺${item.tutar.toStringAsFixed(2)}',
+                ),
+              ),
               onChanged: (val) {
                 setState(() {
                   item.odendi = val ?? false;
@@ -1762,7 +1996,7 @@ class _AnaIskeletState extends State<AnaIskelet> {
                     _islemler.insert(
                       0,
                       Islem(
-                        baslik: 'İhtiyaç Ödemesi: ${item.ad}',
+                        baslik: '${_t("İhtiyaç Ödemesi", "Bill Paid")}: ${item.ad}',
                         tutar: item.tutar,
                         gelirMi: false,
                         kategori: 'Zorunlu İhtiyaç',
@@ -1783,29 +2017,41 @@ class _AnaIskeletState extends State<AnaIskelet> {
   void _yeniIhtiyacEkleDialog() {
     final adCtrl = TextEditingController();
     final tutarCtrl = TextEditingController();
-    final zamanCtrl = TextEditingController(text: 'Bu ay');
+    final zamanCtrl = TextEditingController(text: _t('Bu ay', 'This month'));
 
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: const Color(0xFF162925),
-        title: const Text('Yeni Zorunlu İhtiyaç Tanımla'),
+        title: Text(_t('Yeni Zorunlu İhtiyaç Tanımla', 'Add Fixed Expense')),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            TextField(controller: adCtrl, decoration: const InputDecoration(labelText: 'İhtiyaç Adı (Örn: Erzak)')),
+            TextField(
+              controller: adCtrl,
+              decoration: InputDecoration(
+                labelText: _t('İhtiyaç Adı (Örn: Erzak)', 'Expense Name (e.g. Groceries)'),
+              ),
+            ),
             const SizedBox(height: 10),
             TextField(
               controller: tutarCtrl,
               keyboardType: const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(labelText: 'Tahmini Tutar (₺)'),
+              decoration: InputDecoration(
+                labelText: _t('Tahmini Tutar (₺)', 'Estimated Amount (₺)'),
+              ),
             ),
             const SizedBox(height: 10),
-            TextField(controller: zamanCtrl, decoration: const InputDecoration(labelText: 'Hatırlatma Zamanı')),
+            TextField(
+              controller: zamanCtrl,
+              decoration: InputDecoration(
+                labelText: _t('Hatırlatma Zamanı', 'Due Date / Note'),
+              ),
+            ),
           ],
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('İptal')),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: Text(_t('İptal', 'Cancel'))),
           FilledButton(
             onPressed: () {
               final tutar = double.tryParse(tutarCtrl.text.replaceAll(',', '.')) ?? 0;
@@ -1815,14 +2061,14 @@ class _AnaIskeletState extends State<AnaIskelet> {
                   SabitIhtiyac(
                     ad: adCtrl.text.trim(),
                     tutar: tutar,
-                    sonGun: zamanCtrl.text.trim().isEmpty ? 'Bu ay' : zamanCtrl.text.trim(),
+                    sonGun: zamanCtrl.text.trim().isEmpty ? _t('Bu ay', 'This month') : zamanCtrl.text.trim(),
                   ),
                 );
               });
               _verileriKaydet();
               Navigator.pop(ctx);
             },
-            child: const Text('Ekle'),
+            child: Text(_t('Ekle', 'Add')),
           ),
         ],
       ),
@@ -1847,7 +2093,10 @@ class _AnaIskeletState extends State<AnaIskelet> {
         SnackBar(
           backgroundColor: const Color(0xFFEF4444),
           content: Text(
-            'Kasada yeterli bakiye yok Sayın Kurucu! (${urun.ad}: ₺${urun.fiyat.toStringAsFixed(0)}, Kasa: ₺${_kasaBakiyesi.toStringAsFixed(0)})',
+            _t(
+              'Kasada yeterli bakiye yok Sayın Kurucu! (${urun.ad}: ₺${urun.fiyat.toStringAsFixed(0)}, Kasa: ₺${_kasaBakiyesi.toStringAsFixed(0)})',
+              'Insufficient vault balance, Founder! (${urun.ad}: ₺${urun.fiyat.toStringAsFixed(0)}, Vault: ₺${_kasaBakiyesi.toStringAsFixed(0)})',
+            ),
           ),
         ),
       );
@@ -1858,19 +2107,22 @@ class _AnaIskeletState extends State<AnaIskelet> {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: const Color(0xFF162925),
-        title: const Text('Satın Almayı Onayla'),
+        title: Text(_t('Satın Almayı Onayla', 'Confirm Purchase')),
         content: Text(
-          '${urun.ad} için ₺${urun.fiyat.toStringAsFixed(2)} nakit kasadan düşülüp harcamalara eklensin mi?',
+          _t(
+            '${urun.ad} için ₺${urun.fiyat.toStringAsFixed(2)} nakit kasadan düşülüp harcamalara eklensin mi?',
+            'Deduct ₺${urun.fiyat.toStringAsFixed(2)} for ${urun.ad} from your cash vault and log as an expense?',
+          ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Vazgeç')),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: Text(_t('Vazgeç', 'Cancel'))),
           FilledButton.icon(
             style: FilledButton.styleFrom(
               backgroundColor: const Color(0xFFF59E0B),
               foregroundColor: Colors.black,
             ),
             icon: const Icon(Icons.shopping_bag_rounded, size: 18),
-            label: const Text('Aldım, Kasadan Düş'),
+            label: Text(_t('Aldım, Kasadan Düş', 'Bought, Deduct Cash')),
             onPressed: () {
               setState(() {
                 _gunKontrolEt();
@@ -1879,7 +2131,7 @@ class _AnaIskeletState extends State<AnaIskelet> {
                 _islemler.insert(
                   0,
                   Islem(
-                    baslik: 'Wish Alındı: ${urun.ad}',
+                    baslik: '${_t("Wish Alındı", "Wish Bought")}: ${urun.ad}',
                     tutar: urun.fiyat,
                     gelirMi: false,
                     kategori: 'Keyfi Alışveriş',
@@ -1892,7 +2144,12 @@ class _AnaIskeletState extends State<AnaIskelet> {
               Navigator.pop(ctx);
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
-                  content: Text('Hayırlı olsun! ₺${urun.fiyat.toStringAsFixed(0)} kasadan düşüldü.'),
+                  content: Text(
+                    _t(
+                      'Hayırlı olsun! ₺${urun.fiyat.toStringAsFixed(0)} kasadan düşüldü.',
+                      'Enjoy! ₺${urun.fiyat.toStringAsFixed(0)} deducted from your vault.',
+                    ),
+                  ),
                 ),
               );
             },
@@ -1949,17 +2206,20 @@ class _AnaIskeletState extends State<AnaIskelet> {
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            const Expanded(
+            Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Keyfi İstek Panosu (SS Albümü)',
-                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+                    _t('Keyfi İstek Panosu (SS Albümü)', 'Impulse Wishlist (SS Album)'),
+                    style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
                   ),
                   Text(
-                    'Alırsan kasadan düşer, vazgeçersen bahçeye gübre olur',
-                    style: TextStyle(fontSize: 11, color: Colors.white60),
+                    _t(
+                      'Alırsan kasadan düşer, vazgeçersen bahçeye gübre olur',
+                      'Buying deducts cash; skipping fertilizes your garden',
+                    ),
+                    style: const TextStyle(fontSize: 11, color: Colors.white60),
                   ),
                 ],
               ),
@@ -1968,18 +2228,21 @@ class _AnaIskeletState extends State<AnaIskelet> {
             FilledButton.icon(
               onPressed: _yeniWishEkleDialog,
               icon: const Icon(Icons.add_photo_alternate_rounded),
-              label: const Text('SS & İstek Ekle'),
+              label: Text(_t('SS & İstek Ekle', 'Add Wish')),
             ),
           ],
         ),
         const SizedBox(height: 14),
         if (_wishListesi.isEmpty)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 48),
+          Padding(
+            padding: const EdgeInsets.symmetric(vertical: 48),
             child: Center(
               child: Text(
-                'İstek listesi boş. Sağ üstten SS ve ürün ekleyebilirsin.',
-                style: TextStyle(color: Colors.white54),
+                _t(
+                  'İstek listesi boş. Sağ üstten SS ve ürün ekleyebilirsin.',
+                  'Wishlist is empty. Tap above to add screenshots and items.',
+                ),
+                style: const TextStyle(color: Colors.white54),
               ),
             ),
           ),
@@ -2019,14 +2282,14 @@ class _AnaIskeletState extends State<AnaIskelet> {
                                 ),
                                 onPressed: () => _mevcutKartaSsEkle(urun),
                                 icon: const Icon(Icons.edit_rounded, size: 15),
-                                label: const Text('SS Değiştir', style: TextStyle(fontSize: 11)),
+                                label: Text(_t('SS Değiştir', 'Change SS'), style: const TextStyle(fontSize: 11)),
                               ),
                               const SizedBox(width: 6),
                               IconButton.filled(
                                 style: IconButton.styleFrom(
                                   backgroundColor: Colors.black.withValues(alpha: 0.7),
                                 ),
-                                tooltip: 'Listeden Sil',
+                                tooltip: _t('Listeden Sil', 'Remove'),
                                 icon: const Icon(Icons.delete_outline_rounded, color: Color(0xFFEF4444), size: 18),
                                 onPressed: () {
                                   setState(() => _wishListesi.remove(urun));
@@ -2045,11 +2308,14 @@ class _AnaIskeletState extends State<AnaIskelet> {
                               color: Colors.black.withValues(alpha: 0.65),
                               borderRadius: BorderRadius.circular(8),
                             ),
-                            child: const Row(
+                            child: Row(
                               children: [
-                                Icon(Icons.zoom_in_rounded, size: 14, color: Colors.white70),
-                                SizedBox(width: 4),
-                                Text('Büyütmek için dokun', style: TextStyle(fontSize: 10, color: Colors.white70)),
+                                const Icon(Icons.zoom_in_rounded, size: 14, color: Colors.white70),
+                                const SizedBox(width: 4),
+                                Text(
+                                  _t('Büyütmek için dokun', 'Tap to zoom'),
+                                  style: const TextStyle(fontSize: 10, color: Colors.white70),
+                                ),
                               ],
                             ),
                           ),
@@ -2075,7 +2341,10 @@ class _AnaIskeletState extends State<AnaIskelet> {
                               Icon(Icons.add_photo_alternate_outlined, color: urun.renk, size: 30),
                               const SizedBox(height: 6),
                               Text(
-                                'Bu istek için ekran görüntüsü (SS) seçmek üzere dokun',
+                                _t(
+                                  'Bu istek için ekran görüntüsü (SS) seçmek üzere dokun',
+                                  'Tap to attach a screenshot (SS) for this wish',
+                                ),
                                 style: TextStyle(fontSize: 12, color: urun.renk, fontWeight: FontWeight.w600),
                               ),
                             ],
@@ -2086,7 +2355,7 @@ class _AnaIskeletState extends State<AnaIskelet> {
                         top: 6,
                         right: 6,
                         child: IconButton(
-                          tooltip: 'Listeden Sil',
+                          tooltip: _t('Listeden Sil', 'Remove'),
                           icon: const Icon(Icons.delete_outline_rounded, color: Colors.white54, size: 20),
                           onPressed: () {
                             setState(() => _wishListesi.remove(urun));
@@ -2128,7 +2397,10 @@ class _AnaIskeletState extends State<AnaIskelet> {
                       Row(
                         mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          const Text('Keyfi Bütçe Karşılama Oranı', style: TextStyle(fontSize: 11, color: Colors.white60)),
+                          Text(
+                            _t('Keyfi Bütçe Karşılama Oranı', 'Discretionary Budget Coverage'),
+                            style: const TextStyle(fontSize: 11, color: Colors.white60),
+                          ),
                           Text(
                             '%${(oran * 100).toStringAsFixed(0)}',
                             style: TextStyle(
@@ -2158,7 +2430,10 @@ class _AnaIskeletState extends State<AnaIskelet> {
                                 padding: const EdgeInsets.symmetric(vertical: 11),
                               ),
                               icon: const Icon(Icons.shopping_bag_rounded, size: 17),
-                              label: const Text('Aldım (Kasadan Düş)', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                              label: Text(
+                                _t('Aldım (Kasadan Düş)', 'Bought (Deduct)'),
+                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 12),
+                              ),
                               onPressed: () => _wishSatinAlindi(urun),
                             ),
                           ),
@@ -2169,7 +2444,7 @@ class _AnaIskeletState extends State<AnaIskelet> {
                                 padding: const EdgeInsets.symmetric(vertical: 11),
                               ),
                               icon: const Icon(Icons.spa_rounded, color: Color(0xFF10B981), size: 17),
-                              label: const Text('Vazgeçtim, Göm', style: TextStyle(fontSize: 12)),
+                              label: Text(_t('Vazgeçtim, Göm', 'Skip & Bury'), style: const TextStyle(fontSize: 12)),
                               onPressed: () {
                                 setState(() {
                                   _kurtarilanPara += urun.fiyat;
@@ -2181,7 +2456,10 @@ class _AnaIskeletState extends State<AnaIskelet> {
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   SnackBar(
                                     content: Text(
-                                      'Harika disiplin! ${urun.ad} almaktan vazgeçtin, bahçeye ₺${(urun.fiyat * 0.25).toStringAsFixed(0)} ödül gübresi eklendi!',
+                                      _t(
+                                        'Harika disiplin! ${urun.ad} almaktan vazgeçtin, bahçeye ₺${(urun.fiyat * 0.25).toStringAsFixed(0)} ödül gübresi eklendi!',
+                                        'Great discipline! You skipped ${urun.ad}, adding ₺${(urun.fiyat * 0.25).toStringAsFixed(0)} bonus fertilizer to your garden!',
+                                      ),
                                     ),
                                   ),
                                 );
@@ -2212,7 +2490,7 @@ class _AnaIskeletState extends State<AnaIskelet> {
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
           backgroundColor: const Color(0xFF162925),
-          title: const Text('Albüme Yeni SS & İstek Ekle'),
+          title: Text(_t('Albüme Yeni SS & İstek Ekle', 'Add Screenshot & Wish')),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -2241,34 +2519,47 @@ class _AnaIskeletState extends State<AnaIskelet> {
                     clipBehavior: Clip.antiAlias,
                     child: secilenGorselYolu != null
                         ? Image.file(File(secilenGorselYolu!), fit: BoxFit.cover)
-                        : const Column(
+                        : Column(
                             mainAxisAlignment: MainAxisAlignment.center,
                             children: [
-                              Icon(Icons.add_photo_alternate_rounded, color: Color(0xFF10B981), size: 36),
-                              SizedBox(height: 8),
+                              const Icon(Icons.add_photo_alternate_rounded, color: Color(0xFF10B981), size: 36),
+                              const SizedBox(height: 8),
                               Text(
-                                'Galeriden Ekran Görüntüsü (SS) Seç',
-                                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF10B981)),
+                                _t(
+                                  'Galeriden Ekran Görüntüsü (SS) Seç',
+                                  'Pick Screenshot (SS) from Gallery',
+                                ),
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  color: Color(0xFF10B981),
+                                ),
                               ),
                             ],
                           ),
                   ),
                 ),
                 const SizedBox(height: 12),
-                TextField(controller: adCtrl, decoration: const InputDecoration(labelText: 'Ürün Adı')),
+                TextField(
+                  controller: adCtrl,
+                  decoration: InputDecoration(labelText: _t('Ürün Adı', 'Item Name')),
+                ),
                 const SizedBox(height: 10),
                 TextField(
                   controller: fiyatCtrl,
                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                  decoration: const InputDecoration(labelText: 'Fiyatı (₺)'),
+                  decoration: InputDecoration(labelText: _t('Fiyatı (₺)', 'Price (₺)')),
                 ),
                 const SizedBox(height: 10),
-                TextField(controller: notCtrl, decoration: const InputDecoration(labelText: 'Not (Örn: Trendyol SS)')),
+                TextField(
+                  controller: notCtrl,
+                  decoration: InputDecoration(labelText: _t('Not (Örn: Trendyol SS)', 'Note (e.g. Store SS)')),
+                ),
               ],
             ),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('İptal')),
+            TextButton(onPressed: () => Navigator.pop(ctx), child: Text(_t('İptal', 'Cancel'))),
             FilledButton(
               onPressed: () {
                 final fiyat = double.tryParse(fiyatCtrl.text.replaceAll(',', '.')) ?? 0;
@@ -2278,7 +2569,9 @@ class _AnaIskeletState extends State<AnaIskelet> {
                     WishUrun(
                       ad: adCtrl.text.trim(),
                       fiyat: fiyat,
-                      not: notCtrl.text.trim().isEmpty ? 'Keyfi istek' : notCtrl.text.trim(),
+                      not: notCtrl.text.trim().isEmpty
+                          ? _t('Keyfi istek', 'Wishlist item')
+                          : notCtrl.text.trim(),
                       gorselYolu: secilenGorselYolu,
                     ),
                   );
@@ -2286,7 +2579,7 @@ class _AnaIskeletState extends State<AnaIskelet> {
                 _verileriKaydet();
                 Navigator.pop(ctx);
               },
-              child: const Text('Albüme Koy'),
+              child: Text(_t('Albüme Koy', 'Add to Album')),
             ),
           ],
         ),
